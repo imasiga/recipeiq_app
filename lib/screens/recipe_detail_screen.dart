@@ -3,6 +3,7 @@ import '../config/api_config.dart';
 import '../api/api_client.dart';
 import '../api/recipes_api.dart';
 import '../models/recipe_models.dart';
+import '../utils/image_url.dart';
 
 class RecipeDetailScreen extends StatefulWidget {
   final String recipeId;
@@ -28,24 +29,30 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   }
 
   Future<void> _load() async {
-    setState(() {
-      loading = true;
-      error = null;
-    });
+  if (!mounted) return;
 
-    try {
-      await _apiClient.ensureAnonymousToken();
-      final r = await _recipesApi.getById(widget.recipeId);
-      if (!mounted) return;
-      setState(() => recipe = r);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => error = e.toString());
-    } finally {
-      if (!mounted) return;
-      setState(() => loading = false);
-    }
+  setState(() {
+    loading = true;
+    error = null;
+  });
+
+  try {
+    await _apiClient.ensureAnonymousToken();
+    final r = await _recipesApi.getById(widget.recipeId);
+
+    if (!mounted) return;
+    setState(() {
+      recipe = r;
+      loading = false;
+    });
+  } catch (e) {
+    if (!mounted) return;
+    setState(() {
+      error = e.toString();
+      loading = false;
+    });
   }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -142,44 +149,6 @@ class _HeaderImage extends StatelessWidget {
 
   const _HeaderImage({required this.url, required this.apiBaseUrl});
 
-  String _sanitizeWeirdDoubleUrl(String s) {
-    // Fix cases like: "http://x.comhttps://x.com/storage/..."
-    final first = s.indexOf('http');
-    final last = s.lastIndexOf('http');
-    if (first != -1 && last != -1 && last > first) {
-      return s.substring(last);
-    }
-    return s;
-  }
-
-  String _normalizeImageUrl(String rawUrl) {
-    // If backend returns a RELATIVE path like "/storage/recipes/....png"
-    if (rawUrl.startsWith('/')) {
-      final b = Uri.parse(apiBaseUrl);
-      return b.replace(path: rawUrl).toString();
-    }
-
-    try {
-      final u = Uri.parse(rawUrl);
-
-      // If it already points somewhere real (tunnel / LAN / any non-local host), keep it
-      if (u.host != '127.0.0.1' && u.host != 'localhost') return rawUrl;
-
-      // If it is localhost/127.0.0.1, rewrite to the same host as apiBaseUrl
-      final b = Uri.parse(apiBaseUrl);
-
-      return u
-          .replace(
-            scheme: b.scheme,
-            host: b.host,
-            port: b.hasPort ? b.port : u.port,
-          )
-          .toString();
-    } catch (_) {
-      return rawUrl;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final raw = (url ?? '').trim();
@@ -196,8 +165,10 @@ class _HeaderImage extends StatelessWidget {
       );
     }
 
-    final cleaned = _sanitizeWeirdDoubleUrl(raw);
-    final fixed = _normalizeImageUrl(cleaned);
+    final cleaned = raw.startsWith('http')
+        ? raw.replaceFirst(RegExp(r'^.*(https?://)'), r'$1')
+        : raw;
+    final fixed = ImageUrl.normalize(rawUrl: cleaned, apiBaseUrl: apiBaseUrl);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),

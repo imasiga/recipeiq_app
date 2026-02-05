@@ -4,6 +4,7 @@ import '../api/api_client.dart';
 import '../api/recipes_api.dart';
 import '../models/recipe_models.dart';
 import 'recipe_detail_screen.dart';
+import '../utils/image_url.dart';
 
 class RecipesListScreen extends StatefulWidget {
   const RecipesListScreen({super.key});
@@ -212,44 +213,6 @@ class _Thumb extends StatelessWidget {
 
   const _Thumb({required this.url, required this.apiBaseUrl});
 
-  String _sanitizeWeirdDoubleUrl(String s) {
-    // Fix cases like: "http://x.comhttps://x.com/storage/..."
-    final first = s.indexOf('http');
-    final last = s.lastIndexOf('http');
-    if (first != -1 && last != -1 && last > first) {
-      return s.substring(last);
-    }
-    return s;
-  }
-
-  String _normalizeImageUrl(String rawUrl) {
-    // If backend returns a RELATIVE path like "/storage/recipes/....png"
-    if (rawUrl.startsWith('/')) {
-      final b = Uri.parse(apiBaseUrl);
-      return b.replace(path: rawUrl).toString();
-    }
-
-    try {
-      final u = Uri.parse(rawUrl);
-
-      // Already pointing to tunnel/LAN/etc -> keep
-      if (u.host != '127.0.0.1' && u.host != 'localhost') return rawUrl;
-
-      // Rewrite localhost/127.0.0.1 to current api base host
-      final b = Uri.parse(apiBaseUrl);
-
-      return u
-          .replace(
-            scheme: b.scheme,
-            host: b.host,
-            port: b.hasPort ? b.port : u.port,
-          )
-          .toString();
-    } catch (_) {
-      return rawUrl;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final raw = (url ?? '').trim();
@@ -264,8 +227,10 @@ class _Thumb extends StatelessWidget {
       );
     }
 
-    final cleaned = _sanitizeWeirdDoubleUrl(raw);
-    final fixed = _normalizeImageUrl(cleaned);
+    final cleaned = raw.startsWith('http')
+        ? raw.replaceFirst(RegExp(r'^.*(https?://)'), r'$1')
+        : raw;
+    final fixed = ImageUrl.normalize(rawUrl: cleaned, apiBaseUrl: apiBaseUrl);
 
     return Image.network(
       fixed,
