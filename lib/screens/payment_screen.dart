@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 
+import '../api/api_client.dart';
+import '../api/subscription_api.dart';
 import '../app/app_state.dart';
+import '../config/api_config.dart' as appcfg;
 
 class PaymentScreen extends StatefulWidget {
   final String planName;
@@ -28,6 +31,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   static const _accent = Color.fromRGBO(255, 210, 21, 1);
 
   final InAppPurchase _inAppPurchase = InAppPurchase.instance;
+  final ApiClient _apiClient = ApiClient(baseUrl: appcfg.ApiConfig.baseUrl());
+  late final SubscriptionApi _subscriptionApi = SubscriptionApi(_apiClient);
   StreamSubscription<List<PurchaseDetails>>? _purchaseSubscription;
 
   ProductDetails? _productDetails;
@@ -155,13 +160,38 @@ class _PaymentScreenState extends State<PaymentScreen> {
         });
       } else if (purchase.status == PurchaseStatus.purchased ||
           purchase.status == PurchaseStatus.restored) {
-        await AppState.setIsPro(true);
+        if (!mounted) return;
+        setState(() {
+          _statusMessage = 'Verifying your subscription...';
+        });
+
+        final transactionId =
+            purchase.purchaseID ??
+            purchase.verificationData.localVerificationData;
+
+        bool verified = false;
+
+        try {
+          verified = await _subscriptionApi.syncApplePurchase(
+            productId: purchase.productID,
+            transactionId: transactionId,
+            verificationData: purchase.verificationData.serverVerificationData,
+          );
+        } catch (_) {
+          verified = false;
+        }
+
+        if (verified) {
+          await AppState.setIsPro(true);
+        }
 
         if (!mounted) return;
         setState(() {
           _isPurchasing = false;
-          _purchaseSucceeded = true;
-          _statusMessage = 'Payment successful. Your subscription is active.';
+          _purchaseSucceeded = verified;
+          _statusMessage = verified
+              ? 'Payment successful. Your subscription is active.'
+              : 'Payment completed, but server verification is not available yet.';
         });
 
         if (purchase.pendingCompletePurchase) {
