@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/subscription_products.dart';
 import '../l10n/app_localizations.dart';
 import 'auth_screen.dart';
 import 'payment_screen.dart';
@@ -32,11 +33,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
     ).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
-  void _goToPayment(BuildContext context) {
+  Future<void> _goToPayment(BuildContext context) async {
     final l10n = AppLocalizations.of(context)!;
     final isYearly = _selectedPlan == 'yearly';
 
-    Navigator.of(context).push(
+    final upgraded = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => PaymentScreen(
           planName: isYearly
@@ -44,9 +45,16 @@ class _PaywallScreenState extends State<PaywallScreen> {
               : l10n.paywallMonthlyTitle,
           price: isYearly ? '\$89.99' : '\$7.99',
           period: isYearly ? '/ year' : '/ month',
+          productId: isYearly
+              ? SubscriptionProducts.yearly
+              : SubscriptionProducts.monthly,
         ),
       ),
     );
+
+    if (upgraded == true && context.mounted) {
+      Navigator.of(context).pop(true);
+    }
   }
 
   Widget _featureItem({required IconData icon, required String label}) {
